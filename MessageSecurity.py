@@ -11,18 +11,18 @@ class MessageCipher(object):
     __metaclass__ = ABCMeta
 
     @staticmethod
-    def cipher_for_version(version, keys=None, public_key=None):
+    def cipher_for_version(version):
         # type: (int) -> MessageCipher
         cipher = {
-            1: lambda: V1MessageCipher(keys=keys, public_key=public_key)
+            1: lambda: V1MessageCipher()
         }.get(version)
         return cipher() if cipher is not None else None
 
     @staticmethod
-    def cipher_for_key(key, keys=None, public_key=None):
+    def cipher_for_key(key):
         # type: (bytes) -> MessageCipher
         if len(key) == 48:
-            return V1MessageCipher(keys=keys, public_key=public_key)
+            return V1MessageCipher()
         return None
 
     @abstractmethod
@@ -31,13 +31,13 @@ class MessageCipher(object):
         pass
 
     @abstractmethod
-    def encrypt_key(self, key):
-        # type: (bytes) -> bytes
+    def encrypt_key(self, key, public_key):
+        # type: (bytes, Union[RSA.RSA,RSA.RSA_pub]) -> bytes
         pass
 
     @abstractmethod
-    def decrypt_key(self, key):
-        # type: (bytes) -> bytes
+    def decrypt_key(self, key, private_key):
+        # type: (bytes, RSA.RSA) -> bytes
         pass
 
     @abstractmethod
@@ -55,38 +55,38 @@ class MessageSigner(object):
     __metaclass__ = ABCMeta
 
     @staticmethod
-    def signer_for_version(version, keys=None, public_key=None):
+    def signer_for_version(version):
         # type: (int, RSA.RSA, RSA.RSA_pub) -> MessageSigner
         signer = {
-            1: lambda: V1MessageSigner(keys=keys, public_key=public_key)
+            1: lambda: V1MessageSigner()
         }.get(version)
         return signer() if signer is not None else None
 
     @staticmethod
-    def signer_for_signature(signature, keys=None, public_key=None):
-        # type: (bytes, RSA.RSA, RSA.RSA_pub) -> MessageSigner
+    def signer_for_signature(signature):
+        # type: (bytes) -> MessageSigner
         if signature is not None:
-            return V1MessageSigner(keys=keys, public_key=public_key)
+            return V1MessageSigner()
         return None
 
     @abstractmethod
-    def sign_msg(self, mid, mtype, sender, recipient, chat_id, meta_data, msg_key):
-        # type: (UUID, int, str, str, Optional[UUID], dict, Optional[bytes]) -> bytes
+    def sign_msg(self, mid, mtype, sender, recipient, chat_id, meta_data, msg_key, private_key):
+        # type: (UUID, int, str, str, Optional[UUID], dict, Optional[bytes], RSA.RSA) -> bytes
         pass
 
     @abstractmethod
-    def verify_msg(self, signature, mid, mtype, sender, recipient, chat_id, meta_data, msg_key):
-        # type: (bytes, UUID, int, str, str, Optional[UUID], dict, Optional[bytes]) -> bool
+    def verify_msg(self, signature, mid, mtype, sender, recipient, chat_id, meta_data, msg_key, public_key):
+        # type: (bytes, UUID, int, str, str, Optional[UUID], dict, Optional[bytes], Union[RSA.RSA,RSA.RSA_pub]) -> bool
         pass
 
     @abstractmethod
-    def sign_direct_msg(self, mid, mtype, sender, recipient_device, meta_data, msg_key):
-        # type: (UUID, str, str, UUID, dict, Optional[bytes]) -> bytes
+    def sign_direct_msg(self, mid, mtype, sender, recipient_device, meta_data, msg_key, private_key):
+        # type: (UUID, str, str, UUID, dict, Optional[bytes], RSA.RSA) -> bytes
         pass
 
     @abstractmethod
-    def verify_direct_msg(self, signature, mid, mtype, sender, recipient_device, meta_data, msg_key):
-        # type: (bytes, UUID, str, str, UUID, dict, Optional[bytes]) -> bool
+    def verify_direct_msg(self, signature, mid, mtype, sender, recipient_device, meta_data, msg_key, public_key):
+        # type: (bytes, UUID, str, str, UUID, dict, Optional[bytes], Union[RSA.RSA,RSA.RSA_pub]) -> bool
         pass
 
 
@@ -116,16 +116,8 @@ class V1MessageCipher(MessageCipher):
     ivLength = 16       # AES 256 block length
     secretLength = 32   # AES 256 key length
 
-    def __init__(self, keys=None, public_key=None):
-        # type: (RSA.RSA, RSA.RSA_pub) -> None
+    def __init__(self):
         super(V1MessageCipher, self).__init__()
-        self.keys = keys
-        self.public_key = public_key
-
-    @property
-    def key(self):
-        # type: () -> Union[RSA.RSA, RSA.RSA_pub]
-        return self.keys if self.public_key is None else self.public_key
 
     def parse_key(self, key):
         # type: (bytes) -> Tuple[bytes, bytes]
@@ -148,8 +140,8 @@ class V1MessageCipher(MessageCipher):
         secret = rand(self.secretLength)
         return iv + secret
 
-    def encrypt_key(self, key):
-        # type: (bytes) -> bytes
+    def encrypt_key(self, key, public_key):
+        # type: (bytes, Union[RSA.RSA,RSA.RSA_pub]) -> bytes
         """
         Encrypts the given key.
 
@@ -165,13 +157,14 @@ class V1MessageCipher(MessageCipher):
             [-- IV --][----- SECRET -----]
 
         :param key: Key in [iv][secret] format
+        :param public_key: Public key to encrypt with
         :return: Key with unaltered iv and encrypted secret
         """
         iv, secret = self.parse_key(key)
-        return iv + self.key.public_encrypt(secret, RSA.pkcs1_oaep_padding)
+        return iv + public_key.public_encrypt(secret, RSA.pkcs1_oaep_padding)
 
-    def decrypt_key(self, key):
-        # type: (bytes) -> bytes
+    def decrypt_key(self, key, private_key):
+        # type: (bytes, RSA.RSA) -> bytes
         """
         Decrypts the given key.
 
@@ -187,11 +180,12 @@ class V1MessageCipher(MessageCipher):
             [-- IV --][----- SECRET -----]
 
         :param key: Key in [iv][secret] format
+        :param private_key: Private key to decrypt with
         :return: Key with unaltered iv and decrypted secret
         """
         iv = key[0:self.ivLength]
         secret = key[self.ivLength:]
-        return iv + self.key.private_decrypt(secret, RSA.pkcs1_oaep_padding)
+        return iv + private_key.private_decrypt(secret, RSA.pkcs1_oaep_padding)
 
     def encrypt(self, key, data):
         # type: (bytes, bytes) -> bytes
@@ -242,16 +236,8 @@ class V1MessageSigner(MessageSigner):
 
     digestAlgo = 'sha256'
 
-    def __init__(self, keys=None, public_key=None):
-        # type: (RSA.RSA, RSA.RSA_pub) -> None
+    def __init__(self):
         super(V1MessageSigner, self).__init__()
-        self.keys = keys
-        self.public_key = public_key
-
-    @property
-    def key(self):
-        # type: () -> Union[RSA.RSA, RSA.RSA_pub]
-        return self.keys if self.public_key is None else self.public_key
 
     @staticmethod
     def encode(*args):
@@ -351,8 +337,8 @@ class V1MessageSigner(MessageSigner):
             msg_key
         )
 
-    def sign_msg(self, mid, mtype, sender, recipient, chat_id, meta_data, msg_key):
-        # type: (UUID, int, str, str, Optional[UUID], dict, Optional[bytes]) -> bytes
+    def sign_msg(self, mid, mtype, sender, recipient, chat_id, meta_data, msg_key, private_key):
+        # type: (UUID, int, str, str, Optional[UUID], dict, Optional[bytes], RSA.RSA) -> bytes
         """
         Generates a cryptographic signature for the Message arguments. The arguments
         are ASN1 formatted and DER encoded, digested and a signature is generated.
@@ -363,13 +349,14 @@ class V1MessageSigner(MessageSigner):
         :param chat_id: ID of the Group thread (Optional)
         :param meta_data: [String -> String] dictionary
         :param msg_key: Enciphered key for Message data (Optional)
+        :param private_key: Private key to generate signature
         :return: Cryptographic signature of Message arguments
         """
         digest = self.digest_msg(mid, mtype, sender,  recipient, chat_id, meta_data, msg_key)
-        return self.key.sign(digest, self.digestAlgo)
+        return private_key.sign(digest, self.digestAlgo)
 
-    def verify_msg(self, signature, mid, mtype, sender, recipient, chat_id, meta_data, msg_key):
-        # type: (bytes, UUID, int, str, str, Optional[UUID], dict, Optional[bytes]) -> bool
+    def verify_msg(self, signature, mid, mtype, sender, recipient, chat_id, meta_data, msg_key, public_key):
+        # type: (bytes, UUID, int, str, str, Optional[UUID], dict, Optional[bytes], Union[RSA.RSA,RSA.RSA_pub]) -> bool
         """
         Verifies a cryptographic signature for the Message arguments. The arguments
         are ASN1 formatted and DER encoded, digested and a signature is generated, then
@@ -382,13 +369,14 @@ class V1MessageSigner(MessageSigner):
         :param chat_id: ID of the Group thread (Optional)
         :param meta_data: [String -> String] dictionary
         :param msg_key: Enciphered key for Message data (Optional)
+        :param public_key: Public key to verify signature
         :return: Result of signature verification
         """
         digest = self.digest_msg(mid, mtype, sender,  recipient, chat_id, meta_data, msg_key)
-        return bool(self.key.verify(digest, signature, self.digestAlgo))
+        return bool(public_key.verify(digest, signature, self.digestAlgo))
 
-    def sign_direct_msg(self, mid, mtype, sender, recipient_device, meta_data, msg_key):
-        # type: (UUID, str, str, UUID, dict, Optional[bytes]) -> bytes
+    def sign_direct_msg(self, mid, mtype, sender, recipient_device, meta_data, msg_key, private_key):
+        # type: (UUID, str, str, UUID, dict, Optional[bytes], RSA.RSA) -> bytes
         """
         Generates a cryptographic signature for the Message arguments. The arguments
         are ASN1 formatted and DER encoded, digested and a signature is generated.
@@ -398,13 +386,14 @@ class V1MessageSigner(MessageSigner):
         :param recipient_device: ID of the recipient's device
         :param meta_data: [String -> String] dictionary
         :param msg_key: Enciphered key for Message data (Optional)
+        :param private_key: Private key to generate signature
         :return: Cryptographic signature of Message arguments
         """
         digest = self.digest_direct_msg(mid, mtype, sender, recipient_device, meta_data, msg_key)
-        return self.key.sign(digest, self.digestAlgo)
+        return private_key.sign(digest, self.digestAlgo)
 
-    def verify_direct_msg(self, signature, mid, mtype, sender, recipient_device, meta_data, msg_key):
-        # type: (bytes, UUID, str, str, UUID, dict, Optional[bytes]) -> bytes
+    def verify_direct_msg(self, signature, mid, mtype, sender, recipient_device, meta_data, msg_key, public_key):
+        # type: (bytes, UUID, str, str, UUID, dict, Optional[bytes], Union[RSA.RSA,RSA.RSA_pub]) -> bytes
         """
         Verifies a cryptographic signature for the Message arguments. The arguments
         are ASN1 formatted and DER encoded, digested and a signature is generated, then
@@ -416,10 +405,11 @@ class V1MessageSigner(MessageSigner):
         :param recipient_device: ID of the recipient's device
         :param meta_data: [String -> String] dictionary
         :param msg_key: Enciphered key for Message data (Optional)
+        :param public_key: Public key to verify signature
         :return: Result of signature verification
         """
         digest = self.digest_direct_msg(mid, mtype, sender, recipient_device, meta_data, msg_key)
-        return bool(self.key.verify(digest, signature, self.digestAlgo))
+        return bool(public_key.verify(digest, signature, self.digestAlgo))
 
 
 __all__ = [

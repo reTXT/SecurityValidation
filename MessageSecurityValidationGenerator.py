@@ -34,12 +34,12 @@ class Generator(object):
             test_data['input'] = input_variation
             test_data['versions'] = dict()
             for version in range(1, 2):
-                cipher = MessageCipher.cipher_for_version(version, keys=self.keys)
+                cipher = MessageCipher.cipher_for_version(version)
                 key = None if not input_variation.key else cipher.generate_key()
-                enciphered_key = None if not input_variation.key else cipher.encrypt_key(key)
-                signer = MessageSigner.signer_for_version(version, keys=self.keys)
+                enciphered_key = None if not input_variation.key else cipher.encrypt_key(key, self.keys)
+                signer = MessageSigner.signer_for_version(version)
                 test_data['versions'][version] = {
-                    'signature': Generator.sign(signer, input_variation, enciphered_key),
+                    'signature': Generator.sign(signer, input_variation, enciphered_key, self.keys),
                     'decipheredKey': None if key is None else b64encode(key),
                     'encipheredKey': None if enciphered_key is None else b64encode(enciphered_key),
                     'data': None if not input_variation.key else Generator.encrypt(cipher, key, input_variation.data)
@@ -80,12 +80,12 @@ class Generator(object):
         return b64encode(cipher.encrypt(key, data.encode('utf-8')))
 
     @staticmethod
-    def sign(signer, iv, key):
-        # type: (MessageSigner, Union[MsgInput, DMsgInput]) -> bytes
+    def sign(signer, iv, key, private_key):
+        # type: (MessageSigner, Union[MsgInput, DMsgInput], bytes, RSA.RSA) -> bytes
         if isinstance(iv, MsgInput):
-            sig = signer.sign_msg(iv.id, iv.type, iv.sender, iv.recipient, iv.chat_id, iv.meta_data, key)
+            sig = signer.sign_msg(iv.id, iv.type, iv.sender, iv.recipient, iv.chat_id, iv.meta_data, key, private_key)
         elif isinstance(iv, DMsgInput):
-            sig = signer.sign_direct_msg(iv.id, iv.type, iv.sender, iv.recipient_device, iv.meta_data, key)
+            sig = signer.sign_direct_msg(iv.id, iv.type, iv.sender, iv.recipient_device, iv.meta_data, key, private_key)
         else:
             raise RuntimeError
         return b64encode(sig)
