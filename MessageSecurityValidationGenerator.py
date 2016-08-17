@@ -60,16 +60,16 @@ class Generator(object):
             MsgInput._make((id1, 1, u'me', u'you', id2, {u't': u'html', u'id': u'5'}, False, 'Hello World!')),
             MsgInput._make((id1, 1, u'me', u'you', None, {u't': u'html', u'id': u'5'}, False, 'Hello World!')),
             MsgInput._make((id1, 1, u'me', u'you', id2, {}, False, None)),
-            MsgInput._make((id1, 1, u'me', u'you', id2, {u'c': u'del', u'id': u'5'}, False, None)),
+            MsgInput._make((id1, 1, u'me', u'you', id2, {u'c': u'del', u'id': u'5', u'q': u'x'}, False, None)),
             MsgInput._make((id1, 1, u'me', u'you', None, {}, False, None)),
-            MsgInput._make((id1, 1, u'me', u'you', None, {u'c': u'del', u'id': u'5'}, False, None)),
+            MsgInput._make((id1, 1, u'me', u'you', None, {u'c': u'del', u'id': u'5', u'q': u'x'}, False, None)),
 
             DMsgInput._make((id1, u'key', u'me', id2, {}, True, u'Hello World!')),
-            DMsgInput._make((id1, u'key', u'me', id2, {u'type': u'text/html'}, True, u'Hello World!')),
+            DMsgInput._make((id1, u'key', u'me', id2, {u'type': u'text/html', u'a': u'b'}, True, u'Hello World!')),
             DMsgInput._make((id1, u'key', u'me', id2, {}, False, u'Hello World!')),
-            DMsgInput._make((id1, u'key', u'me', id2, {u'type': u'text/html'}, False, u'Hello World!')),
+            DMsgInput._make((id1, u'key', u'me', id2, {u'type': u'text/html', u'k': u'r'}, False, u'Hello World!')),
             DMsgInput._make((id1, u'key', u'me', id2, {}, False, None)),
-            DMsgInput._make((id1, u'key', u'me', id2, {u'command': u'go'}, False, None)),
+            DMsgInput._make((id1, u'key', u'me', id2, {u'command': u'go', u'x': u'x', u'c': u'b'}, False, None)),
         )
 
     @staticmethod
